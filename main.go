@@ -90,7 +90,7 @@ func findInDir(dir, name string) string {
 			if ext == strings.ToUpper(e) {
 				path := filepath.Join(dir, name)
 				if isExecutable(path) {
-					return path
+					return normalizePath(path)
 				}
 				return ""
 			}
@@ -99,13 +99,13 @@ func findInDir(dir, name string) string {
 		for _, ext := range extensions {
 			path := filepath.Join(dir, name+ext)
 			if isExecutable(path) {
-				return path
+				return normalizePath(path)
 			}
 		}
 	} else {
 		path := filepath.Join(dir, name)
 		if isExecutable(path) {
-			return path
+			return normalizePath(path)
 		}
 	}
 
@@ -114,11 +114,7 @@ func findInDir(dir, name string) string {
 
 func isExecutable(path string) bool {
 	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-
-	if info.IsDir() {
+	if err != nil || info.IsDir() {
 		return false
 	}
 
@@ -127,4 +123,13 @@ func isExecutable(path string) bool {
 	}
 
 	return true
+}
+
+func normalizePath(path string) string {
+	if runtime.GOOS == "windows" {
+		if rp, err := filepath.EvalSymlinks(path); err == nil {
+			return rp
+		}
+	}
+	return path
 }
