@@ -60,6 +60,12 @@ func TestFindInDir(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	if runtime.GOOS == "windows" {
+		if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+			tmpDir = resolved
+		}
+	}
+
+	if runtime.GOOS == "windows" {
 		t.Run("finds .exe file", func(t *testing.T) {
 			exeFile := filepath.Join(tmpDir, "testprog.exe")
 			if err := os.WriteFile(exeFile, []byte("test"), 0755); err != nil {
@@ -180,6 +186,15 @@ func TestFindExecutable(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(tmpDir2) })
 
+	if runtime.GOOS == "windows" {
+		if resolved, err := filepath.EvalSymlinks(tmpDir1); err == nil {
+			tmpDir1 = resolved
+		}
+		if resolved, err := filepath.EvalSymlinks(tmpDir2); err == nil {
+			tmpDir2 = resolved
+		}
+	}
+
 	var testExe1, testExe2 string
 	if runtime.GOOS == "windows" {
 		testExe1 = filepath.Join(tmpDir1, "prog1.exe")
@@ -262,6 +277,12 @@ func TestFindExecutableWithEmptyDirs(t *testing.T) {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	if runtime.GOOS == "windows" {
+		if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+			tmpDir = resolved
+		}
+	}
 
 	var testExe string
 	if runtime.GOOS == "windows" {
@@ -379,6 +400,12 @@ func TestFindExecutableWithPath(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
+	if runtime.GOOS == "windows" {
+		if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+			tmpDir = resolved
+		}
+	}
+
 	var testExe string
 	if runtime.GOOS == "windows" {
 		testExe = filepath.Join(tmpDir, "myprog.exe")
@@ -421,6 +448,10 @@ func TestFindInCurrentDirectory(t *testing.T) {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
 
 	testExe := filepath.Join(tmpDir, "cwdprog.exe")
 	if err := os.WriteFile(testExe, []byte("test"), 0755); err != nil {
