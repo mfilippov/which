@@ -131,7 +131,11 @@ func normalizePath(path string) string {
 		base := filepath.Base(path)
 
 		if target, err := os.Readlink(dir); err == nil {
-			dir = target
+			if filepath.IsAbs(target) {
+				dir = target
+			} else {
+				dir = filepath.Join(filepath.Dir(dir), target)
+			}
 		}
 
 		resolvedPath := filepath.Join(dir, base)
