@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -546,6 +547,149 @@ func TestCaseSensitiveFilesystem(t *testing.T) {
 		result := findInDir(tmpDir, "PROG")
 		if result != upperFile {
 			t.Errorf("Expected %s, got %s", upperFile, result)
+		}
+	})
+}
+
+func TestNormalizePath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("normalizePath is Windows-specific")
+	}
+
+	tmpDir, err := os.MkdirTemp("", "which-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
+
+	t.Run("normalizes extension case", func(t *testing.T) {
+		testFile := filepath.Join(tmpDir, "test.exe")
+		if err := os.WriteFile(testFile, []byte("test"), 0755); err != nil {
+			t.Fatalf("Failed to create test file: %v", err)
+		}
+
+		inputPath := filepath.Join(tmpDir, "test.EXE")
+		result := normalizePath(inputPath)
+
+		if !strings.HasSuffix(result, "test.exe") {
+			t.Errorf("Expected path ending with 'test.exe', got %s", result)
+		}
+	})
+}
+
+func TestJunctionResolution(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Junction points are Windows-specific")
+	}
+
+	tmpDir, err := os.MkdirTemp("", "which-junction-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
+
+	targetDir := filepath.Join(tmpDir, "target")
+	if err := os.Mkdir(targetDir, 0755); err != nil {
+		t.Fatalf("Failed to create target dir: %v", err)
+	}
+
+	testExe := filepath.Join(targetDir, "prog.exe")
+	if err := os.WriteFile(testExe, []byte("test"), 0755); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	junctionDir := filepath.Join(tmpDir, "junction")
+	cmd := exec.Command("cmd", "/c", "mklink", "/J", junctionDir, targetDir)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create junction: %v", err)
+	}
+
+	t.Run("finds executable through junction", func(t *testing.T) {
+		result := findInDir(junctionDir, "prog")
+		if result == "" {
+			t.Error("Expected to find executable through junction")
+		}
+	})
+
+	t.Run("normalizes case through junction", func(t *testing.T) {
+		inputPath := filepath.Join(junctionDir, "prog.EXE")
+		result := normalizePath(inputPath)
+
+		if !strings.HasSuffix(result, "prog.exe") {
+			t.Errorf("Expected path ending with 'prog.exe', got %s", result)
+		}
+	})
+
+	t.Run("resolves junction to target", func(t *testing.T) {
+		inputPath := filepath.Join(junctionDir, "prog.EXE")
+		result := normalizePath(inputPath)
+
+		if !strings.Contains(result, "target") {
+			t.Errorf("Expected path to contain 'target' (resolved junction), got %s", result)
+		}
+	})
+}
+
+func TestFindExecutableThroughJunction(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Junction points are Windows-specific")
+	}
+
+	originalPath := os.Getenv("PATH")
+	t.Cleanup(func() { _ = os.Setenv("PATH", originalPath) })
+
+	tmpDir, err := os.MkdirTemp("", "which-junction-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
+
+	targetDir := filepath.Join(tmpDir, "target")
+	if err := os.Mkdir(targetDir, 0755); err != nil {
+		t.Fatalf("Failed to create target dir: %v", err)
+	}
+
+	testExe := filepath.Join(targetDir, "junctionprog.exe")
+	if err := os.WriteFile(testExe, []byte("test"), 0755); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	junctionDir := filepath.Join(tmpDir, "junction")
+	cmd := exec.Command("cmd", "/c", "mklink", "/J", junctionDir, targetDir)
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create junction: %v", err)
+	}
+
+	if err := os.Setenv("PATH", junctionDir); err != nil {
+		t.Fatalf("Failed to set PATH: %v", err)
+	}
+
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origDir) })
+
+	t.Run("finds and normalizes executable through junction in PATH", func(t *testing.T) {
+		result := findExecutable("junctionprog")
+		if result == "" {
+			t.Fatal("Expected to find executable")
+		}
+
+		if strings.HasSuffix(result, ".EXE") {
+			t.Errorf("Expected lowercase extension, got uppercase: %s", result)
 		}
 	})
 }

@@ -127,9 +127,19 @@ func isExecutable(path string) bool {
 
 func normalizePath(path string) string {
 	if runtime.GOOS == "windows" {
-		if rp, err := filepath.EvalSymlinks(path); err == nil {
+		dir := filepath.Dir(path)
+		base := filepath.Base(path)
+
+		if target, err := os.Readlink(dir); err == nil {
+			dir = target
+		}
+
+		resolvedPath := filepath.Join(dir, base)
+
+		if rp, err := filepath.EvalSymlinks(resolvedPath); err == nil {
 			return rp
 		}
+		return resolvedPath
 	}
 	return path
 }
